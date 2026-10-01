@@ -113,8 +113,12 @@ def fetch_category_nodes(
     # non-JSON interstitial (200 + HTML) to datacenter IPs.
     menu = None
     for _attempt in range(6):
-        r = session.get(f"{BASE_URL}/api/v1/category/menu",
-                        headers=_api_headers(session_id), timeout=20)
+        try:
+            r = session.get(f"{BASE_URL}/api/v1/category/menu",
+                            headers=_api_headers(session_id), timeout=20)
+        except requests.exceptions.RequestException:
+            time.sleep(min(5 * (_attempt + 1), 30))
+            continue
         if r.status_code in (429, 500, 502, 503, 504):
             time.sleep(min(5 * (_attempt + 1), 30))
             continue
@@ -181,13 +185,21 @@ def _fetch_page(
         "itemsPerPage": PAGE_SIZE,
         "assortment":  "mais relevantes",
     }
-    r = session.post(
-        f"{BASE_URL}/api/v3/search",
-        json=body,
-        params={"type": "CSR", "uf": "RS"},
-        headers=_api_headers(session_id),
-        timeout=30,
-    )
+    try:
+        r = session.post(
+            f"{BASE_URL}/api/v3/search",
+            json=body,
+            params={"type": "CSR", "uf": "RS"},
+            headers=_api_headers(session_id),
+            timeout=30,
+        )
+    except requests.exceptions.RequestException:
+        # network error / timeout (curl_cffi) — retry, don't crash the whole run
+        if attempt >= 5:
+            print("    Network error 5x — giving up on this page")
+            return [], 0, 0
+        time.sleep(min(5 * (attempt + 1), 20))
+        return _fetch_page(session, session_id, dept_slug, sub_slug, cat_id, page, attempt + 1)
     if r.status_code == 429:
         if attempt >= 5:
             print("    Rate limited 5x — giving up on this page")
