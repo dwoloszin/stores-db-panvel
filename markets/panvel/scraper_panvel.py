@@ -38,7 +38,11 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-import requests
+# panvel fronts its BFF API with Akamai Bot Manager (since ~2026-09-29), which
+# 403s "Access Denied" to any client whose TLS/HTTP2 fingerprint isn't a real
+# browser (plain `requests` is blocked even from a residential IP). curl_cffi
+# impersonates Chrome's fingerprint and passes. API-compatible with requests.
+from curl_cffi import requests
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -69,11 +73,9 @@ def _make_session() -> Tuple[requests.Session, str]:
     Visits the homepage to collect CDN cookies, then generates a random
     UUID as the sessionId (replicated from the Angular client behaviour).
     """
-    s = requests.Session()
+    s = requests.Session(impersonate="chrome")
     s.headers.update({
-        "User-Agent":      BROWSER_UA,
         "Accept-Language": "pt-BR,pt;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
     })
     s.get(BASE_URL, timeout=20)
 
